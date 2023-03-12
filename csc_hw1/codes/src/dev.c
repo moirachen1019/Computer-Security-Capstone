@@ -94,46 +94,99 @@ void fmt_frame(Dev *self, Net net, Esp esp, Txp txp)
     // [TODO]: store the whole frame into self->frame
     // and store the length of the frame into self->framelen
 
+    // // calculate the length of the ESP header and trailer
+    // size_t esphdrlen = sizeof(EspHeader) + esp.plen + esp.tlr.pad_len;
+    // size_t esptrailerlen = sizeof(EspTrailer) + esp.authlen;
+
+    // // calculate the total length of the packet
+    // size_t pktlen = net.hdrlen + esphdrlen + txp.hdrlen + txp.plen;
+    // //size_t pktlen = 14 +  sizeof(struct iphdr);// ! 之後改不是常數
+
+    // // allocate memory for the frame
+    // self->frame = malloc(pktlen);
+    // if (!self->frame) {
+    //     fprintf(stderr, "Error: failed to allocate memory for frame\n");
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // // copy the link-layer header
+    // memcpy(self->frame, self->linkhdr, 14); // ! 之後改不是常數
+    
+    // // copy the IP header
+    // memcpy(self->frame + 14, &net.ip4hdr, sizeof(struct iphdr)); // ! 之後改不是常數
+
+    // // copy the ESP header
+    // // EspHeader *esphdr = (EspHeader *)(self->frame + net.hdrlen + sizeof(struct iphdr));
+    // // esphdr->spi = htonl(esp.hdr.spi);
+    // // esphdr->seq = htonl(esp.hdr.seq);
+    // // uint8_t *padpl = esp.set_padpl(&esp);
+    // // memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + sizeof(EspHeader), padpl, esp.plen + esp.tlr.pad_len);
+    // memcpy(self->frame + 14 + sizeof(struct iphdr), &esp.hdr, sizeof(EspHeader)); 
+
+    // memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader), &txp.thdr, txp.hdrlen);
+    // memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen, txp.pl, txp.plen);
+
+    // // memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader), &esp.pl, esp.plen); 
+
+    // // // copy the ESP trailer
+    // // EspTrailer *esptrailer = (EspTrailer *)(self->frame + net.hdrlen + sizeof(struct iphdr) + sizeof(EspHeader) + esp.plen + esp.tlr.pad_len);
+    // // esptrailer->pad_len = esp.tlr.pad_len;
+    // // esptrailer->nxt = net.pro;
+
+    // // // copy the TCP header
+    // // memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + esphdrlen, &txp.thdr, txp.hdrlen);
+
+    // // // copy the TCP payload
+    // // memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + esphdrlen + txp.hdrlen, txp.pl, txp.plen);
+
+    // // set the length of the frame
+    // self->framelen = pktlen;
+
     // calculate the length of the ESP header and trailer
     size_t esphdrlen = sizeof(EspHeader) + esp.plen + esp.tlr.pad_len;
     size_t esptrailerlen = sizeof(EspTrailer) + esp.authlen;
 
     // calculate the total length of the packet
-    // size_t pktlen = net.hdrlen + esphdrlen + txp.hdrlen + txp.plen;
-    size_t pktlen = 14 +  sizeof(struct iphdr);// ! 之後改不是常數
+    size_t pktlen = 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen + txp.plen + esp.tlr.pad_len + sizeof(EspTrailer) + esp.authlen;
 
     // allocate memory for the frame
-    self->frame = malloc(pktlen);
+    self->frame = (uint8_t *)malloc(pktlen);
     if (!self->frame) {
         fprintf(stderr, "Error: failed to allocate memory for frame\n");
         exit(EXIT_FAILURE);
     }
 
     // copy the link-layer header
-    memcpy(self->frame, self->linkhdr, 14); // ! 之後改不是常數
-    
+    memcpy(self->frame, self->linkhdr, 14);
+
     // copy the IP header
-    memcpy(self->frame + 14, &net.ip4hdr, sizeof(struct iphdr)); // ! 之後改不是常數
+    memcpy(self->frame + 14, &net.ip4hdr, sizeof(struct iphdr));
 
     // copy the ESP header
-    EspHeader *esphdr = (EspHeader *)(self->frame + net.hdrlen + sizeof(struct iphdr));
-    esphdr->spi = htonl(esp.hdr.spi);
-    esphdr->seq = htonl(esp.hdr.seq);
-    uint8_t *padpl = esp.set_padpl(&esp);
-    memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + sizeof(EspHeader), padpl, esp.plen + esp.tlr.pad_len);
+    memcpy(self->frame + 14 + sizeof(struct iphdr), &esp.hdr, sizeof(EspHeader));
 
-    // // copy the ESP trailer
-    // EspTrailer *esptrailer = (EspTrailer *)(self->frame + net.hdrlen + sizeof(struct iphdr) + sizeof(EspHeader) + esp.plen + esp.tlr.pad_len);
-    // esptrailer->pad_len = esp.tlr.pad_len;
-    // esptrailer->nxt = net.pro;
+    // copy the TCP header
+    memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader), &txp.thdr, txp.hdrlen);
+    printf("%02x\n", txp.thdr.th_sport);
+    printf("%d\n", txp.hdrlen);
 
-    // // copy the TCP header
-    // memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + esphdrlen, &txp.thdr, txp.hdrlen);
+    // copy the TCP payload
+    memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen, txp.pl, txp.plen);
 
-    // // copy the TCP payload
-    // memcpy(self->frame + net.hdrlen + sizeof(struct iphdr) + esphdrlen + txp.hdrlen, txp.pl, txp.plen);
+    // add the padding data
+    // uint8_t *padpl = esp.set_padpl(&esp);
+    // uint8_t temp[esp.tlr.pad_len] = 0;
+    memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen + txp.plen, esp.pad, esp.tlr.pad_len);
+    // free(padpl);
+    
+    // copy the ESP trailer
+    memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen + txp.plen + esp.tlr.pad_len, &esp.tlr, sizeof(EspTrailer));
 
-    // set the length of the frame
+    // // add the authentication data
+    // uint8_t *auth = esp.set_auth(&esp, hmac_sha1);
+    memcpy(self->frame + 14 + sizeof(struct iphdr) + sizeof(EspHeader) + txp.hdrlen + txp.plen + esp.tlr.pad_len + sizeof(EspTrailer), esp.auth, esp.authlen);
+    // free(auth);
+
     self->framelen = pktlen;
 }
 

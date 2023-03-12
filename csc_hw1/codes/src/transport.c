@@ -73,7 +73,7 @@ uint8_t *dissect_tcp(Net *net, Txp *self, uint8_t *segm, size_t segm_len)
     // Parse the TCP header
     if(segm!=NULL) self->thdr = *(struct tcphdr *)segm;
     //self->thdr.psh = 1;
-    self->hdrlen = self->thdr.th_off * 4;
+    self->hdrlen = sizeof(struct tcphdr);
 
     // Verify that the segment length is at least as long as the TCP header
     if (segm_len < self->hdrlen) {
@@ -109,13 +109,13 @@ Txp *fmt_tcp_rep(Txp *self, struct iphdr iphdr, uint8_t *data, size_t dlen)
     self->thdr.ack_seq = htonl(self->x_tx_ack);
 
     // Set the TCP data offset (header length)
-    self->hdrlen = sizeof(struct tcphdr) / 4;
+    self->hdrlen = sizeof(struct tcphdr);
 
     // Set the TCP flags
     self->thdr.fin = 0;
     self->thdr.syn = 0;
     self->thdr.rst = 0;
-    self->thdr.psh = 0;
+    self->thdr.psh = 1;
     self->thdr.ack = 1;
     self->thdr.urg = 0;
 

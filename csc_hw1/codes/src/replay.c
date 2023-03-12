@@ -31,6 +31,8 @@ void tx_esp_rep(Dev dev,
     memcpy(esp.pl, &txp.thdr, txp.hdrlen);
     memcpy(esp.pl + txp.hdrlen, txp.pl, txp.plen);
     esp.set_auth(&esp, hmac_sha1_96);
+    // printf("outside %02x\n", esp.tlr.nxt);
+    // printf("outside %02x\n", esp.tlr.pad_len);
     nb += sizeof(EspHeader) + sizeof(EspTrailer) +
         esp.tlr.pad_len + esp.authlen;
 
@@ -83,6 +85,7 @@ bool dissect_rx_data(Dev *dev,
                 bool* test_for_dissect)
 {
     uint8_t *net_data = net->dissect(net, dev->frame + LINKHDRLEN, dev->framelen - LINKHDRLEN);
+    // printf("%d\n", net->pro);
     if (net->pro == ESP) {
         uint8_t *esp_data = esp->dissect(esp, net_data, net->plen);
 

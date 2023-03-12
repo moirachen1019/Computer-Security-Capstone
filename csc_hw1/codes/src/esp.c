@@ -88,14 +88,24 @@ uint8_t *set_esp_pad(Esp *self)
     // [TODO]: Fiill up self->pad and self->pad_len (Ref. RFC4303 Section 2.4)
 
     // Determine how much padding is needed
-    size_t total_len = sizeof(EspHeader) + self->plen + sizeof(EspTrailer) + self->authlen;
+    size_t total_len = sizeof(EspHeader) + self->plen;
     size_t pad_len = ESP_BLOCK_SIZE - (total_len % ESP_BLOCK_SIZE);
 
-    // Allocate memory for the padding
-    uint8_t *pad = (uint8_t *)calloc(pad_len, sizeof(uint8_t));
+    // Allocate memory for the padding and fill the padding
+    uint8_t *pad = (uint8_t *)malloc(pad_len * sizeof(uint8_t));
     if (pad == NULL) {
-        // Handle memory allocation error
+        // Handle allocation error
         return NULL;
+    }
+    for (size_t i = 0; i < pad_len; i++) {
+        if(i % 8 == 0) pad[i] = 0x01;
+        else if(i % 8 == 1) pad[i] = 0x02;
+        else if(i % 8 == 2) pad[i] = 0x03;
+        else if(i % 8 == 3) pad[i] = 0x04;
+        else if(i % 8 == 4) pad[i] = 0x05;
+        else if(i % 8 == 5) pad[i] = 0x06;
+        else if(i % 8 == 6) pad[i] = 0x07;
+        else if(i % 8 == 7) pad[i] = 0x08;
     }
 
     // Update Esp struct with the padding and its length
@@ -123,19 +133,36 @@ uint8_t *set_esp_auth(Esp *self,
 
     // [TODO]: Put everything needed to be authenticated into buff and add up nb
 
-    // Calculate the length of the payload and pad to 32-bit boundary
-    size_t payload_len = self->plen;
-    size_t padded_len = (payload_len % 4 == 0) ? payload_len : payload_len + (4 - payload_len % 4);
-    nb += padded_len;
+    // // Calculate the length of the payload and pad to 32-bit boundary
+    // size_t payload_len = self->plen;
+    // size_t padded_len = (payload_len % 4 == 0) ? payload_len : payload_len + (4 - payload_len % 4);
+    // nb += padded_len;
 
-    // Add padding length field (4 bytes) to the buffer
-    uint32_t pad_len_field = htonl(padded_len - payload_len);
-    memcpy(buff, &pad_len_field, sizeof(uint32_t));
-    nb += sizeof(uint32_t);
+    // // Add padding length field (4 bytes) to the buffer
+    // uint32_t pad_len_field = htonl(padded_len - payload_len);
+    // memcpy(buff, &pad_len_field, sizeof(uint32_t));
+    // nb += sizeof(uint32_t);
 
-    // Copy the payload into the buffer
-    memcpy(buff + nb, self->pl, payload_len);
-    nb += payload_len;
+    // // Copy the payload into the buffer
+    // memcpy(buff + nb, self->pl, payload_len);
+    // nb += payload_len;
+
+    // Copy ESP header to buffer
+    memcpy(buff + nb, &(self->hdr), sizeof(EspHeader));
+    nb += sizeof(EspHeader);
+
+    // Copy ESP payload to buffer
+    memcpy(buff + nb, self->pl, self->plen);
+    nb += self->plen;
+
+    // Generate and set padding and payload
+
+    memcpy(buff + nb, self->pad, self->tlr.pad_len);
+    nb += self->tlr.pad_len;
+
+    // Copy ESP trailer to buffer
+    memcpy(buff + nb, &(self->tlr), sizeof(EspTrailer));
+    nb += sizeof(EspTrailer);
 
     // *************************
 
@@ -162,6 +189,10 @@ uint8_t *dissect_esp(Esp *self, uint8_t *esp_pkt, size_t esp_len)
 
     // Get the ESP payload length
     size_t plen = esp_len - sizeof(EspHeader) - sizeof(EspTrailer);
+
+    // set ESP header
+    self->hdr.seq = esp_hdr->seq + 16777216;
+    self->hdr.spi = esp_hdr->spi;
 
     // Get the ESP payload
     self->pl = esp_pkt;
@@ -195,9 +226,6 @@ uint8_t *dissect_esp(Esp *self, uint8_t *esp_pkt, size_t esp_len)
 Esp *fmt_esp_rep(Esp *self, Proto p)
 {
     // [TODO]: Fill up ESP header and trailer (prepare to send)
-    
-    // Set the protocol type to ESP
-    p = ESP;
 
     // Set the next protocol in the trailer to the value of 'p'
     self->tlr.nxt = (uint8_t)p;
@@ -210,6 +238,8 @@ Esp *fmt_esp_rep(Esp *self, Proto p)
 
     // Set the padding length in the trailer
     self->tlr.pad_len = pad_len;
+    // printf("inside %02x\n", self->tlr.nxt);
+    // printf("inside %02x\n", self->tlr.pad_len);
 
     // Allocate memory for the padded payload and copy the payload data into it
     size_t padded_len = sizeof(EspHeader) + self->plen + pad_len + sizeof(EspTrailer);

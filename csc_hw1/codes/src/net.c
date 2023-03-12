@@ -91,7 +91,10 @@ Net *fmt_net_rep(Net *self)
     // self->ip4hdr.frag_off = 0;                 // Fragment offset (unused)
     // self->ip4hdr.ttl = 64;                     // Time-to-live
     // self->ip4hdr.protocol = self->pro;         // Protocol of the encapsulated packet
+    self->ip4hdr.check = 0x00;
+    // self->ip4hdr.protocol = IPPROTO_TCP;
     self->ip4hdr.check = cal_ipv4_cksm(self->ip4hdr);                    // Checksum (to be calculated later) cal_ipv4_cksm(struct iphdr iphdr)
+    // self->ip4hdr.protocol = IPPROTO_ESP;
     // self->ip4hdr.saddr = inet_addr(self->src_ip);  // Source IP address (in network byte order)
     // self->ip4hdr.daddr = inet_addr(self->dst_ip);  // Destination IP address (in network byte order)
 
