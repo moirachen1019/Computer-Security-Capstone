@@ -112,19 +112,20 @@ Txp *fmt_tcp_rep(Txp *self, struct iphdr iphdr, uint8_t *data, size_t dlen)
     self->hdrlen = sizeof(struct tcphdr);
 
     // Set the TCP flags
-    self->thdr.fin = 0;
-    self->thdr.syn = 0;
-    self->thdr.rst = 0;
-    self->thdr.psh = 1;
-    self->thdr.ack = 1;
-    self->thdr.urg = 0;
+    // self->thdr.fin = 0;
+    // self->thdr.syn = 0;
+    // self->thdr.rst = 0;
+    // self->thdr.psh = 1;
+    // self->thdr.ack = 1;
+    // self->thdr.urg = 0;
 
     // Set the TCP window size
-    self->thdr.window = htons(65535);
+    // self->thdr.window = htons(65535);
 
     // Set the TCP checksum to 0 for now (it will be calculated later)
     // cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int plen)
     // cal_tcp_cksm(iphdr, self->tcphdr, data, dlen)
+    self->thdr.check = 0x00;
     self->thdr.check = cal_tcp_cksm(iphdr, self->thdr, data, dlen);
 
     // Set the TCP urgent pointer to 0
