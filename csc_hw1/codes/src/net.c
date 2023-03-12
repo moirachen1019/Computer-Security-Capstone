@@ -86,7 +86,7 @@ Net *fmt_net_rep(Net *self)
     // self->ip4hdr.version = 4;                  // IPv4
     // self->ip4hdr.ihl = self->hdrlen / 4;        // Header length in 4-byte words
     // self->ip4hdr.tos = 0;                      // Type of service (unused)
-    self->ip4hdr.tot_len = htons(self->plen);  // Total length of the IP packet (including header and data)
+    self->ip4hdr.tot_len = htons(self->plen) + htons(self->hdrlen);  // Total length of the IP packet (including header and data)
     // self->ip4hdr.id = htons(1);                // Identification field (unused)
     // self->ip4hdr.frag_off = 0;                 // Fragment offset (unused)
     // self->ip4hdr.ttl = 64;                     // Time-to-live
