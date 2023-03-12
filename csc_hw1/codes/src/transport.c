@@ -21,42 +21,57 @@ struct pseudo_hdr {
 uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int plen)
 {
     // [TODO]: Finish TCP checksum calculation
-    uint16_t *buf;
     uint32_t sum = 0;
-    int len = ntohs(iphdr.tot_len) - iphdr.ihl * 4;
-
-    // allocate memory for pseudo-header + TCP header + payload
-    buf = (uint16_t *)malloc(len + plen + sizeof(struct pseudo_hdr));
-    if (!buf) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-
-    // construct pseudo-header
-    struct pseudo_hdr phdr = {
-        .src_addr = {iphdr.saddr},
-        .dst_addr = {iphdr.daddr},
-        .zeros = 0,
-        .proto = IPPROTO_TCP,
-        .len = htons(len)
-    };
-
-    // copy pseudo-header, TCP header, and payload into buffer
-    memcpy(buf, &phdr, sizeof(struct pseudo_hdr));
-    memcpy(buf + sizeof(struct pseudo_hdr) / 2, &tcphdr, sizeof(struct tcphdr));
-    memcpy(buf + sizeof(struct pseudo_hdr) / 2 + sizeof(struct tcphdr) / 2, pl, plen);
-
-    // compute checksum over buffer
-    for (int i = 0; i < (len + plen + sizeof(struct pseudo_hdr)) / 2; i++) {
+    uint16_t tcp_len = htons(sizeof(struct tcphdr) + plen);
+    
+    // Pseudo header (used in TCP checksum calculation)
+    struct pseudo_tcp_hdr {
+        uint32_t saddr;
+        uint32_t daddr;
+        uint8_t zero;
+        uint8_t protocol;
+        uint16_t length;
+    } p_tcp;
+    
+    memset(&p_tcp, 0, sizeof(struct pseudo_tcp_hdr));
+    
+    p_tcp.saddr = iphdr.saddr;
+    p_tcp.daddr = iphdr.daddr;
+    p_tcp.zero = 0;
+    p_tcp.protocol = IPPROTO_TCP;
+    p_tcp.length = tcp_len;
+    
+    // Calculate TCP checksum using the pseudo header and TCP header + payload
+    uint16_t *buf = (uint16_t *) &p_tcp;
+    int i;
+    for (i = 0; i < sizeof(struct pseudo_tcp_hdr) / 2; i++) {
         sum += ntohs(buf[i]);
     }
-    free(buf);
-
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
+    
+    buf = (uint16_t *) &tcphdr;
+    for (i = 0; i < sizeof(struct tcphdr) / 2; i++) {
+        sum += ntohs(buf[i]);
     }
-
-    return (uint16_t)(~sum);
+    
+    buf = (uint16_t *) pl;
+    for (i = 0; i < plen / 2; i++) {
+        sum += ntohs(buf[i]);
+    }
+    
+    // Handle odd length payloads
+    if (plen % 2) {
+        sum += ((uint16_t) pl[plen - 1]) << 8;
+    }
+    
+    // Add carry
+    while (sum >> 16) {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    
+    // Take 1's complement
+    sum = ~sum;
+    
+    return htons((uint16_t) sum);
 }
 
 uint8_t *dissect_tcp(Net *net, Txp *self, uint8_t *segm, size_t segm_len)
@@ -82,6 +97,7 @@ uint8_t *dissect_tcp(Net *net, Txp *self, uint8_t *segm, size_t segm_len)
 
     // Parse the TCP payload
     self->plen = segm_len - self->hdrlen;
+    // printf("%d\n", self->plen);
     self->pl = segm + self->hdrlen;
     
     // Update the expected TX sequence and acknowledgement numbers
@@ -106,6 +122,7 @@ Txp *fmt_tcp_rep(Txp *self, struct iphdr iphdr, uint8_t *data, size_t dlen)
 
     // Set the TCP sequence and acknowledge numbers
     self->thdr.seq = htonl(self->x_tx_seq);
+    // printf("%d\n", self->x_tx_seq);
     self->thdr.ack_seq = htonl(self->x_tx_ack);
 
     // Set the TCP data offset (header length)
