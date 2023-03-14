@@ -27,11 +27,11 @@ uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int
     // set pseudo header for checksum
     struct pseudo_hdr p_tcp;
     memset(&p_tcp, 0, sizeof(struct pseudo_hdr));
-    p_tcp.src_addr = iphdr.saddr;
-    p_tcp.dst_addr = iphdr.daddr;
-    p_tcp.zeros = 0;
-    p_tcp.proto = IPPROTO_TCP;
-    p_tcp.len = tcp_len;
+    p_tcp.saddr = iphdr.saddr;
+    p_tcp.daddr = iphdr.daddr;
+    p_tcp.zero = 0;
+    p_tcp.protocol = IPPROTO_TCP;
+    p_tcp.length = tcp_len;
     
     // calculate checksum using pseudo header + TCP header + payload
     uint16_t *buf = (uint16_t *) &p_tcp;
@@ -79,7 +79,7 @@ uint8_t *dissect_tcp(Net *net, Txp *self, uint8_t *segm, size_t segm_len) // Our
     self->plen = segm_len - self->hdrlen;
     self->pl = segm + self->hdrlen;
     self->x_tx_seq = (self->thdr.th_ack);
-    self->x_tx_acntohlk = ntohl(self->thdr.th_seq) + self->plen;
+    self->x_tx_ack = ntohl(self->thdr.th_seq) + self->plen;
     self->x_src_port = ntohs(self->thdr.th_dport);
     self->x_dst_port = ntohs(self->thdr.th_sport);
 
