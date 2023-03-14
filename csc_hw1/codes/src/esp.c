@@ -203,11 +203,6 @@ Esp *fmt_esp_rep(Esp *self, Proto p) // Our code
 {
     // [TODO]: Fill up ESP header and trailer (prepare to send)
 
-    // set ESP header (spi & seq)
-    self->hdr.seq = htonl(esp_hdr_rec.seq);
-    self->hdr.spi = esp_hdr_rec.spi;
-    memcpy(padded_payload, &self->hdr, sizeof(EspHeader));
-
     // calculate padding length (the packet length has to be a multiple of 4)
     size_t pad_len = 4 - ((sizeof(EspHeader) + self->plen + sizeof(EspTrailer)) % 4);
     if (pad_len == 4) {
@@ -226,6 +221,11 @@ Esp *fmt_esp_rep(Esp *self, Proto p) // Our code
     if (pad_len > 0) {
         memset(padded_payload + sizeof(EspHeader) + self->plen, 0, pad_len);
     }
+
+    // set ESP header (spi & seq)
+    self->hdr.seq = htonl(esp_hdr_rec.seq);
+    self->hdr.spi = esp_hdr_rec.spi;
+    memcpy(padded_payload, &self->hdr, sizeof(EspHeader));
 
    // set ESP trailer
     self->tlr.pad_len = pad_len;
