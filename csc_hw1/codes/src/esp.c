@@ -24,21 +24,22 @@ SecurityAssociation *sadb;  // global SADB
 #define num_security_associations 2
 #define KEY_LENGTH 16   
 
-void get_ik(int type, uint8_t *key)
+void get_ik(int type, uint8_t *key) // Our code
 {
     // [TODO]: Dump authentication key from security association database (SADB)
     // (Ref. RFC2367 Section 2.3.4 & 2.4 & 3.1.10)
+
     struct sadb_msg msg;
     char buf[BUF_SIZE];
     int sock_fd;
 
-    // Create PF_KEY socket
+    // create PF_KEY socket
     if ((sock_fd = socket(PF_KEY, SOCK_RAW, PF_KEY_V2)) < 0) {
         perror("socket");
         return;
     }
 
-    // Prepare SADB_GET message to dump authentication key
+    // set SADB_DUMP
     memset(&msg, 0, sizeof(msg));
     msg.sadb_msg_version = PF_KEY_V2;
     msg.sadb_msg_type = SADB_DUMP;
@@ -46,13 +47,14 @@ void get_ik(int type, uint8_t *key)
     msg.sadb_msg_len = sizeof(msg) / 8;
     msg.sadb_msg_seq = time(NULL);
 
+    // request SADB_DUMP
     if (write(sock_fd, &msg, sizeof(msg)) < 0) {
         perror("write");
         close(sock_fd);
         return;
     }
 
-    // Receive SADB_GET response
+    // receive SADB_DUMP
     int n = read(sock_fd, buf, BUF_SIZE);
     if (n < 0) {
         perror("read");
@@ -60,19 +62,19 @@ void get_ik(int type, uint8_t *key)
         return;
     }
 
+    // extract key extension
     struct sadb_ext *ext = (struct sadb_ext *)(buf + sizeof(struct sadb_msg));
     while ((char *)ext < (buf + n)) {
+        // find the SADB_EXT_KEY_AUTH type
         if (ext->sadb_ext_type == SADB_EXT_KEY_AUTH) {
             struct sadb_key *key_ext = (struct sadb_key *) ext;
+            // extract key
             uint8_t *auth_key = ((uint8_t *) key_ext) + sizeof(struct sadb_key);
             size_t auth_key_len = (key_ext->sadb_key_len * sizeof(uint64_t)) - sizeof(struct sadb_key);
-            // for (int i = 0; i < auth_key_len; i++) {
-            //     printf("%02x ", auth_key[i]);
-            // }
-            // printf("\n");
             memcpy(key, auth_key, auth_key_len);
             break;
         }
+        // go to the next key extension
         ext = (struct sadb_ext *)((char *)ext + ((ext->sadb_ext_len * sizeof(uint64_t) + sizeof(uint64_t) - 1) / sizeof(uint64_t) * sizeof(uint64_t)));
     }
     close(sock_fd);
@@ -83,39 +85,35 @@ void get_esp_key(Esp *self)
     get_ik(SADB_SATYPE_ESP, self->esp_key);
 }
 
-uint8_t *set_esp_pad(Esp *self)
+uint8_t *set_esp_pad(Esp *self) // Our code
 {
     // [TODO]: Fiill up self->pad and self->pad_len (Ref. RFC4303 Section 2.4)
 
-    // Determine how much padding is needed
+    // calculate total length & padding length
     size_t total_len = sizeof(EspHeader) + self->plen + sizeof(EspTrailer);
     size_t pad_len = ESP_BLOCK_SIZE - (total_len % ESP_BLOCK_SIZE);
 
-    // Allocate memory for the padding and fill the padding
+    // allocate memory and fill padding
     uint8_t *pad = (uint8_t *)malloc(pad_len * sizeof(uint8_t));
     if (pad == NULL) {
-        // Handle allocation error
         return NULL;
     }
     for (size_t i = 0; i < pad_len; i++) {
         if(i % 4 == 0) pad[i] = 0x01;
         else if(i % 4 == 1) pad[i] = 0x02;
         else if(i % 4 == 2) pad[i] = 0x03;
-        //else if(i % 4 == 3) pad[i] = 0x04;
     }
 
-    // Update Esp struct with the padding and its length
     self->pad = pad;
     self->tlr.pad_len = pad_len;
 
     return pad;
-
 }
 
 uint8_t *set_esp_auth(Esp *self,
                       ssize_t (*hmac)(uint8_t const *, size_t,
                                       uint8_t const *, size_t,
-                                      uint8_t *))
+                                      uint8_t *)) // Our code
 {
     if (!self || !hmac) {
         fprintf(stderr, "Invalid arguments of %s().\n", __func__);
@@ -129,143 +127,113 @@ uint8_t *set_esp_auth(Esp *self,
 
     // [TODO]: Put everything needed to be authenticated into buff and add up nb
 
-    // // Calculate the length of the payload and pad to 32-bit boundary
-    // size_t payload_len = self->plen;
-    // size_t padded_len = (payload_len % 4 == 0) ? payload_len : payload_len + (4 - payload_len % 4);
-    // nb += padded_len;
-
-    // // Add padding length field (4 bytes) to the buffer
-    // uint32_t pad_len_field = htonl(padded_len - payload_len);
-    // memcpy(buff, &pad_len_field, sizeof(uint32_t));
-    // nb += sizeof(uint32_t);
-
-    // // Copy the payload into the buffer
-    // memcpy(buff + nb, self->pl, payload_len);
-    // nb += payload_len;
-
-    // Copy ESP header to buffer
+    // copy ESP header to buffer
     memcpy(buff + nb, &(self->hdr), sizeof(EspHeader));
     nb += sizeof(EspHeader);
 
-    // Copy ESP payload to buffer
+    // ESP payload
     memcpy(buff + nb, self->pl, self->plen);
     nb += self->plen;
 
-    // Generate and set padding and payload
-
+    // padding & payload
     memcpy(buff + nb, self->pad, self->tlr.pad_len);
     nb += self->tlr.pad_len;
 
-    // Copy ESP trailer to buffer
+    // ESP trailer
     memcpy(buff + nb, &(self->tlr), sizeof(EspTrailer));
     nb += sizeof(EspTrailer);
 
-    // *************************
-
-    // Compute the HMAC
+    // compute HMAC & set authlen
     ret = hmac(self->esp_key, esp_keylen, buff, nb, self->auth);
-
     if (ret == -1) {
         fprintf(stderr, "Error occurs when try to compute authentication data");
         return NULL;
     }
-
     self->authlen = ret;
+
     return self->auth;
 }
 
-uint8_t *dissect_esp(Esp *self, uint8_t *esp_pkt, size_t esp_len)
+uint8_t *dissect_esp(Esp *self, uint8_t *esp_pkt, size_t esp_len) // Our code
 {
     // [TODO]: Collect information from esp_pkt.
     // Return payload of ESP
 
-    // Parse the ESP header
+    // extract ESP header
     EspHeader *esp_hdr = (EspHeader *) esp_pkt;
-    esp_pkt += sizeof(EspHeader);
 
-    // Get the ESP payload length
-    size_t plen = esp_len - sizeof(EspHeader) - sizeof(EspTrailer) - HMAC96AUTHLEN;
-    // plen = sizeof(EspHeader) + payload len (tcp header + tcp payload) + padding len + trailor len + authlen
-
-    // set ESP header
+    // set ESP header (spi & seq)
     self->hdr.spi = esp_hdr->spi;
     uint32_t value = htonl(esp_hdr->seq);
     value += 1;
     self->hdr.seq = ntohl(value);
 
-    // Get the ESP payload
+    // set ESP payload length
+    size_t plen = esp_len - sizeof(EspHeader) - sizeof(EspTrailer) - HMAC96AUTHLEN;
+
+    // move to ESP payload and set it
+    esp_pkt += sizeof(EspHeader);
     self->pl = esp_pkt;
     
-
-    // Move to the ESP trailer
+    // move to ESP trailer and extract it
     esp_pkt += plen;
-
-    // Parse the ESP trailer
     EspTrailer *esp_trl = (EspTrailer *) esp_pkt;
+
+    // move to ESP padding and set it
     esp_pkt += sizeof(EspTrailer);
-
-    // Set the ESP padding
     size_t padlen = esp_trl->pad_len;
-
     plen -= padlen;
     self->plen = plen;
     self->pad = esp_pkt;
-    // esp_pkt += padlen;
 
-    // Set the ESP trailer
+    // set ESP trailer
     self->tlr = *esp_trl;
 
-    // Set the ESP authentication data
+    // set ESP authentication data
     size_t authlen = esp_len - sizeof(EspHeader) - plen - padlen - sizeof(EspTrailer);
     self->auth = esp_pkt;
     self->authlen = authlen;
 
     esp_pkt = esp_pkt - padlen - plen - sizeof(EspHeader);
-    // Return the ESP payload
+
     return self->pl;
 }
 
-Esp *fmt_esp_rep(Esp *self, Proto p)
+Esp *fmt_esp_rep(Esp *self, Proto p) // Our code
 {
     // [TODO]: Fill up ESP header and trailer (prepare to send)
 
-    // Set the next protocol in the trailer to the value of 'p'
-    self->tlr.nxt = (uint8_t)p;
+    // set ESP header (spi & seq)
+    self->hdr.seq = htonl(esp_hdr_rec.seq);
+    self->hdr.spi = esp_hdr_rec.spi;
+    memcpy(padded_payload, &self->hdr, sizeof(EspHeader));
 
-    // Calculate the padding length needed to make the packet a multiple of 4 bytes
+    // calculate padding length (the packet length has to be a multiple of 4)
     size_t pad_len = 4 - ((sizeof(EspHeader) + self->plen + sizeof(EspTrailer)) % 4);
     if (pad_len == 4) {
         pad_len = 0;
-    }
+    }    
 
-    // Set the padding length in the trailer
-    self->tlr.pad_len = pad_len;
-    self->hdr.seq = htonl(esp_hdr_rec.seq);
-    self->hdr.spi = esp_hdr_rec.spi;
-
-    // printf("inside %02x\n", self->tlr.nxt);
-    // printf("inside %02x\n", self->tlr.pad_len);
-
-    // Allocate memory for the padded payload and copy the payload data into it
+    // allocate memory for the padded payload
     size_t padded_len = sizeof(EspHeader) + self->plen + pad_len + sizeof(EspTrailer);
     uint8_t *padded_payload = malloc(padded_len);
     if (padded_payload == NULL) {
-        return NULL;  // Failed to allocate memory for padded payload
+        return NULL;
     }
     memcpy(padded_payload + sizeof(EspHeader), self->pl, self->plen);
 
-    // Add padding bytes (if needed)
+    // add padding
     if (pad_len > 0) {
         memset(padded_payload + sizeof(EspHeader) + self->plen, 0, pad_len);
     }
 
-    // Copy the ESP header and trailer into the padded payload buffer
-    memcpy(padded_payload, &self->hdr, sizeof(EspHeader));
+   // set ESP trailer
+    self->tlr.pad_len = pad_len;
+    self->tlr.nxt = (uint8_t)p; // the next protocol
     memcpy(padded_payload + sizeof(EspHeader) + self->plen + pad_len, &self->tlr, sizeof(EspTrailer));
 
-    // Set the payload pointer and length to the padded payload
+    // payload points to the padded payload
     self->pl = padded_payload + sizeof(EspHeader);
-    // self->plen = self->plen + pad_len;
 
     return self;
 }
