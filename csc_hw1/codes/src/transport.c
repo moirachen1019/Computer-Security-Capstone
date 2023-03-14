@@ -10,14 +10,6 @@
 #include "net.h"
 #include "transport.h"
 
-struct pseudo_hdr {
-    uint32_t saddr;
-    uint32_t daddr;
-    uint8_t zero;
-    uint8_t protocol;
-    uint16_t length;
-};
-
 uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int plen) // Our code
 {
     // [TODO]: Finish TCP checksum calculation
@@ -25,8 +17,14 @@ uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int
     uint16_t tcp_len = htons(sizeof(struct tcphdr) + plen);
     
     // set pseudo header for checksum
-    struct pseudo_hdr p_tcp;
-    memset(&p_tcp, 0, sizeof(struct pseudo_hdr));
+    struct pseudo_tcp_hdr {
+        uint32_t saddr;
+        uint32_t daddr;
+        uint8_t zero;
+        uint8_t protocol;
+        uint16_t length;
+    } p_tcp;
+    memset(&p_tcp, 0, sizeof(struct pseudo_tcp_hdr));
     p_tcp.saddr = iphdr.saddr;
     p_tcp.daddr = iphdr.daddr;
     p_tcp.zero = 0;
@@ -35,15 +33,16 @@ uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int
     
     // calculate checksum using pseudo header + TCP header + payload
     uint16_t *buf = (uint16_t *) &p_tcp;
-    for (int i = 0; i < sizeof(struct pseudo_hdr) / 2; i++) {
+    int i;
+    for (i = 0; i < sizeof(struct pseudo_tcp_hdr) / 2; i++) {
         sum += ntohs(buf[i]);
     }
     buf = (uint16_t *) &tcphdr;
-    for (int i = 0; i < sizeof(struct tcphdr) / 2; i++) {
+    for (i = 0; i < sizeof(struct tcphdr) / 2; i++) {
         sum += ntohs(buf[i]);
     }
     buf = (uint16_t *) pl;
-    for (int i = 0; i < plen / 2; i++) {
+    for (i = 0; i < plen / 2; i++) {
         sum += ntohs(buf[i]);
     }
     // handle odd length payloads
@@ -53,7 +52,7 @@ uint16_t cal_tcp_cksm(struct iphdr iphdr, struct tcphdr tcphdr, uint8_t *pl, int
     // add carry
     while (sum >> 16) {
         sum = (sum & 0xffff) + (sum >> 16);
-    } 
+    }
     // take 1's complement
     sum = ~sum;
     return htons((uint16_t) sum);
