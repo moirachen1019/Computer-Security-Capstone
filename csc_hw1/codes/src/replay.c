@@ -22,10 +22,8 @@ void tx_esp_rep(Dev dev,
     size_t nb = dlen;
 
     txp.plen = dlen;
-    // printf("%u\n", txp.plen);
     txp.fmt_rep(&txp, net.ip4hdr, data, nb);
     nb += sizeof(struct tcphdr);
-    // printf("%u\n", nb);
 
     esp.plen = nb;
     esp.fmt_rep(&esp, TCP);
@@ -33,8 +31,6 @@ void tx_esp_rep(Dev dev,
     memcpy(esp.pl, &txp.thdr, txp.hdrlen);
     memcpy(esp.pl + txp.hdrlen, txp.pl, txp.plen);
     esp.set_auth(&esp, hmac_sha1_96);
-    // printf("outside %02x\n", esp.tlr.nxt);
-    // printf("outside %02x\n", esp.tlr.pad_len);
     nb += sizeof(EspHeader) + sizeof(EspTrailer) +
         esp.tlr.pad_len + esp.authlen;
 
@@ -87,7 +83,6 @@ bool dissect_rx_data(Dev *dev,
                 bool* test_for_dissect)
 {
     uint8_t *net_data = net->dissect(net, dev->frame + LINKHDRLEN, dev->framelen - LINKHDRLEN);
-    // printf("%d\n", net->pro);
     if (net->pro == ESP) {
         uint8_t *esp_data = esp->dissect(esp, net_data, net->plen);
 
@@ -157,7 +152,6 @@ void record_txp(Net *net, Esp *esp, Txp *txp)
 void get_info(Dev *dev, Net *net, Esp *esp, Txp *txp,int *state,char* victim_ip,char* server_ip,bool* test_for_dissect)
 {
     extern EspHeader esp_hdr_rec;
-    // printf("start wait\n");
     wait(dev, net, esp, txp, state, victim_ip, server_ip, test_for_dissect);
 
     if(*state != SEND_ACK){

