@@ -191,7 +191,9 @@ uint8_t *dissect_esp(Esp *self, uint8_t *esp_pkt, size_t esp_len)
     // plen = sizeof(EspHeader) + payload len (tcp header + tcp payload) + padding len + trailor len + authlen
 
     // set ESP header
-    self->hdr.seq = esp_hdr->seq + 16777216;
+    uint32_t value = htonl(esp_hdr->seq);
+    value += 1;
+    self->hdr.seq = ntohl(value);
     self->hdr.spi = esp_hdr->spi;
 
     // Get the ESP payload
